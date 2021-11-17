@@ -30,10 +30,10 @@ jobs:                                 # collective within your pipeline
       - store_artifacts:
           path: test_results
                                                   # grab all the files and attaching them to the build in the dashboard
-  workflows:                                      # way to tie all the jobs together
-      build_test:                                 # workflow called build_test
-          jobs:                                   # workflow needs jobs
-              - run_tests                         # name of the job above
+workflows:                                      # way to tie all the jobs together
+    build_test:                                 # workflow called build_test
+        jobs:                                   # workflow needs jobs
+            - run_tests                         # name of the job above
               
 
 
