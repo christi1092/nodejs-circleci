@@ -5,6 +5,7 @@ var request = require("request"),
 
 describe("Welcome to CI/CD Server", function() {
 
+  //test
   describe("GET /", function() {
     it("returns status code 200", function(done) {
       request.get(base_url, function(error, response, body) {

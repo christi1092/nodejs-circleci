@@ -1,137 +1,40 @@
-version: 2.1
-jobs:
-  run_tests:
-    docker:
-      - image: circleci/node:12
+version: 2.1                          # 2.16 is the latest version
+
+jobs:                                 # collective within your pipeline
+  run_tests:                          # job called "run_tests"
+    docker:                           # defines where the source code is gonna run -> executors
+                                      # 4 types of executors: 
+                                        # docker image where the code will be tested, run, built and executed
+                                        # machine alias for vm (if you need more horsepower)
+                                        # macOS for testing iOS applications, Swift code
+                                        # Windows
+      - image: circleci/node:10       # defines the actual environment where our code will run -> node 10 image
     steps:
-      - checkout
-      - run:
-          name: Install npm dependencies
-          command: |
-            npm install --save
+      - checkout                                # alias for gitclone
+      - run:                                    # install npm dependencies
+          name: Install npm dependencies        # run the commands inside the file
+          command: |                            # installs the dependencies defined in package.json
+            npm install --save                  
+
       - run:
           name: Run Unit Tests
-          command: |
+          command: |                             # below we are calling mocha which is installes with the previous step
             ./node_modules/mocha/bin/mocha test/ --reporter mochawesome --reporter-options reportDir=test-results,reportFilename=test-results
-      - store_test_results:
+      - store_test_results:                       # above mocka shall look into test folder
+                                                  # mochawesome creates a HTML page for the results of the tests
+                                                  # don't forget to add mochawesome to dependencies (!)
+                                                  # reportDir creates new folder with specified filename
+                                                  # store_test_results tells CircleCI to grab everything that is in the test results and use it as a test result
+                                                  
           path: test-results
       - store_artifacts:
-          path: test-results
-  build_docker_image:
-    docker:
-      - image: circleci/node:12
-    steps:
-      - checkout
-      - setup_remote_docker:
-          docker_layer_caching: false
-      - run:
-          name: Build Docker image
-          command: |
-            export TAG=0.2.<< pipeline.number >>
-            export IMAGE_NAME=$CIRCLE_PROJECT_REPONAME
-            docker build -t $DOCKER_LOGIN/$IMAGE_NAME -t $DOCKER_LOGIN/$IMAGE_NAME:$TAG .
-            echo $DOCKER_PWD | docker login -u $DOCKER_LOGIN --password-stdin
-            docker push $DOCKER_LOGIN/$IMAGE_NAME
-  gke_create_cluster:
-    docker:
-      - image: ariv3ra/terraform-gcp:latest
-    environment:
-      CLOUDSDK_CORE_PROJECT: cicd-workshops
-    steps:
-      - checkout
-      - run:
-          name: Create GKE Cluster
-          command: |
-            echo $TF_CLOUD_TOKEN | base64 -d > $HOME/.terraformrc
-            echo $GOOGLE_CLOUD_KEYS | base64 -d > $HOME/gcloud_keys
-            gcloud auth activate-service-account --key-file ${HOME}/gcloud_keys
-            cd terraform/gke_cluster/
-            terraform init
-            terraform plan -var credentials=$HOME/gcloud_keys -out=plan.txt
-            terraform apply plan.txt
-  gke_deploy_app:
-    docker:
-      - image: ariv3ra/terraform-gcp:latest
-    environment:
-      CLOUDSDK_CORE_PROJECT: cicd-workshops
-    steps:
-      - checkout
-      - run:
-          name: Deploy App to GKE
-          command: |
-            export CLUSTER_NAME="cicd-workshops"
-            export TAG=0.2.<< pipeline.number >>
-            export DOCKER_IMAGE="docker-image=${DOCKER_LOGIN}/${CIRCLE_PROJECT_REPONAME}:$TAG"
-            echo $TF_CLOUD_TOKEN | base64 -d > $HOME/.terraformrc
-            echo $GOOGLE_CLOUD_KEYS | base64 -d > $HOME/gcloud_keys
-            gcloud auth activate-service-account --key-file ${HOME}/gcloud_keys
-            gcloud container clusters get-credentials $CLUSTER_NAME --zone="us-east1-d"
-            cd terraform/kubernetes
-            terraform init
-            terraform plan -var $DOCKER_IMAGE -out=plan.txt
-            terraform apply plan.txt
-            export ENDPOINT="$(terraform output endpoint)"
-            mkdir -p /tmp/gke/
-            echo 'export ENDPOINT='${ENDPOINT} > /tmp/gke/gke-endpoint
-      - persist_to_workspace:
-          root: /tmp/gke
-          paths:
-            - "*"
-  smoketest_gke_deployment:
-    docker:
-      - image: circleci/node:12
-    steps:
-      - checkout
-      - attach_workspace:
-          at: /tmp/gke/
-      - run:
-          name: Smoke Test GKE Deployment
-          command: |
-            source /tmp/gke/gke-endpoint
-            ./test/smoke_test $ENDPOINT
-  gke_destroy_cluster:
-    docker:
-      - image: ariv3ra/terraform-gcp:latest
-    environment:
-      CLOUDSDK_CORE_PROJECT: cicd-workshops
-    steps:
-      - checkout
-      - run:
-          name: Destroy GKE Cluster
-          command: |
-            export CLUSTER_NAME="cicd-workshops"
-            export TAG=0.2.<< pipeline.number >>
-            export DOCKER_IMAGE="docker-image=${DOCKER_LOGIN}/${CIRCLE_PROJECT_REPONAME}:$TAG"            
-            echo $TF_CLOUD_TOKEN | base64 -d > $HOME/.terraformrc
-            echo $GOOGLE_CLOUD_KEYS | base64 -d > $HOME/gcloud_keys
-            gcloud auth activate-service-account --key-file ${HOME}/gcloud_keys
-            cd terraform/kubernetes
-            terraform init
-            gcloud container clusters get-credentials $CLUSTER_NAME --zone="us-east1-d"            
-            terraform destroy -var $DOCKER_IMAGE --auto-approve
-            cd ../gke_cluster/
-            terraform init
-            terraform destroy -var credentials=$HOME/gcloud_keys --auto-approve
-workflows:
-  build_test:
-    jobs:
-      - run_tests
-      # - build_docker_image
-      # - gke_create_cluster
-      # - gke_deploy_app:
-      #     requires:
-      #       - run_tests
-      #       - build_docker_image
-      #       - gke_create_cluster
-      # - smoketest_gke_deployment:
-      #     requires:
-      #       - gke_deploy_app
-      # - approve-destroy:
-      #     type: approval
-      #     requires:
-      #       - gke_create_cluster
-      #       - gke_deploy_app
-      #       - smoketest_gke_deployment
-      # - gke_destroy_cluster:
-      #     requires:
-      #       - approve-destroy
+          path: test_results
+                                                  # grab all the files and attaching them to the build in the dashboard
+  workflows:                                      # way to tie all the jobs together
+      build_test:                                 # workflow called build_test
+          jobs:                                   # workflow needs jobs
+              - run_tests                         # name of the job above
+              
+
+
+
